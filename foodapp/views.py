@@ -164,6 +164,7 @@ class StripeInvoiceView(LoginRequiredMixin, TemplateView):
 
             ### List ###
             context['invoices'] = _get_invoices_list(stripe_customer)
+            context['payment_error'] = _has_payment_error(stripe_customer)
 
         return context
 
@@ -233,6 +234,20 @@ def get_stripe_customer(user):
         return None
 
 
+def _has_payment_error(stripe_customer):
+    """ Determines if the stripe customer has an unresolved stripe invoice payment error
+    """
+    payment_error = False
+    invoices = stripe.Invoice.list(customer=stripe_customer).get('data')
+
+    if len(invoices) > 0:
+        last_invoice = invoices.pop(0)
+        payment_error = not last_invoice.paid and \
+            last_invoice.attempted and not last_invoice.forgiven
+
+    return payment_error
+
+
 class OrderListView(LoginRequiredMixin, ListView):
     model = models.Order
     context_object_name = 'orders'
@@ -247,15 +262,8 @@ class SuperStripeInvoiceView(LoginRequiredMixin, TemplateView):
         users = models.User.objects.filter(is_active=True)
         customer_dict = {user: get_stripe_customer(user) for user in users}
         invoices_dict = {}
-        payment_error = False
 
         for user, stripe_customer in customer_dict.items():
-            invoices = stripe.Invoice.list(customer=stripe_customer).get('data')
-            if len(invoices) > 0:
-                last_invoice = invoices.pop(0)
-                payment_error = not last_invoice.paid and \
-                    last_invoice.attempted and not last_invoice.forgiven
-
             if stripe_customer is None:
                 invoices_dict[user] = None
             else:
@@ -263,7 +271,7 @@ class SuperStripeInvoiceView(LoginRequiredMixin, TemplateView):
                     stripe_customer is not None,  # user_exists
                     _get_uninvoiced_items_dict(stripe_customer)['total_cost'],  # amount_owed
                     bool(list(stripe.Invoice.all(customer=stripe_customer, paid=False))),  # unpaid_invoices
-                    payment_error,
+                    _has_payment_error(stripe_customer),
                 )
 
         context['invoices_dict'] = invoices_dict

@@ -83,6 +83,13 @@
    {% if customer_exists %}
         {% if invoices %}
             <div class="list-group" id="invoices">
+                {% if payment_error%}
+                    <div class="list-group-item">
+                    <h4 class='text-danger'>
+                        Warning: One of your recent invoice payments has failed, possibly due to incorrect or out of date card information, or low balance.  Please check this information and consult the lab administrator.
+                    </h4>
+                    </div>
+                {% endif %}
                 {% for id, invoice_date, paid, items, total in invoices %}
                     <h4>
                         <a class="list-group-item accordion-toggle" href="#{{ id }}" data-toggle="collapse">{{ invoice_date|date:"l, M d Y" }}:&nbsp;&nbsp;<strong>{{ total }}</strong> - <strong>{% if paid %}<span class='text-success'>Paid</span>{% else %}<span class='text-danger'>Unpaid</span>{% endif %}</strong></a>
