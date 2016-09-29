@@ -56,7 +56,16 @@ def create_invoices_and_send_notifications():
 
         for customer in customers:
             # Calculate total cost
-            all_invoice_items = stripe.InvoiceItem.all(customer=customer.customer_id).get('data')
+            invoices = stripe.Invoice.list(limit=1).get('data')
+
+            last_invoice = invoices[0] if len(invoices > 0) else None
+
+            if last_invoice:
+                all_invoice_items = stripe.InvoiceItem.list(customer=customer.customer_id,
+                                                            created={'gte': last_invoice.date}).get('data')
+            else:
+                all_invoice_items = stripe.InvoiceItem.list(customer=customer.customer_id).get('data')
+
             total_cost = 0
 
             if len(all_invoice_items) == 0:

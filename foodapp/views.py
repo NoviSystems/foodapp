@@ -165,7 +165,7 @@ class StripeInvoiceView(LoginRequiredMixin, TemplateView):
 
 
 def _get_uninvoiced_items_dict(stripe_customer):
-    all_invoice_items = stripe.InvoiceItem.all(customer=stripe_customer)
+    all_invoice_items = stripe.InvoiceItem.list(customer=stripe_customer)
     invoice_items = []
     total_count = 0
     total_cost = 0
@@ -190,7 +190,7 @@ def _get_uninvoiced_items_dict(stripe_customer):
 
 def _get_invoices_list(stripe_customer):
     invoices = []
-    all_invoices = stripe.Invoice.all(customer=stripe_customer).get('data')
+    all_invoices = stripe.Invoice.list(customer=stripe_customer).get('data')
 
     for data in all_invoices:
         items = []
@@ -229,7 +229,7 @@ def _has_payment_error(stripe_customer):
     """ Determines if the stripe customer has an unresolved stripe invoice payment error
     """
     payment_error = False
-    invoices = stripe.Invoice.all(customer=stripe_customer).get('data')
+    invoices = stripe.Invoice.list(customer=stripe_customer).get('data')
 
     for invoice in invoices:
         payment_error = not invoice.paid and \
@@ -262,7 +262,7 @@ class SuperStripeInvoiceView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
             if stripe_customer is None:
                 invoices_dict[user] = None
             else:
-                invoices = stripe.Invoice.all(customer=stripe_customer).get('data')
+                invoices = stripe.Invoice.list(customer=stripe_customer).get('data')
                 unpaid_invoices = len([invoice for invoice in invoices if not invoice.paid]) > 0
 
                 invoices_dict[user] = (
