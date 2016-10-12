@@ -6,7 +6,7 @@ from django.core import mail
 from django.core.urlresolvers import reverse
 from django.template import Template, Context
 
-from foodapp.models import RiceCooker, StripeCustomer, Order
+from foodapp import models
 
 stripe.api_key = settings.STRIPE_API_SECRET_KEY
 
@@ -22,7 +22,7 @@ invoice.
 
 @shared_task
 def reset_rice_cooker():
-    cookers = RiceCooker.objects.all()
+    cookers = models.RiceCooker.objects.all()
     for cooker in cookers:
         cooker.is_on = False
         cooker.save()
@@ -31,11 +31,11 @@ def reset_rice_cooker():
 @shared_task
 def create_invoices_and_send_notifications():
 
-    customers = StripeCustomer.objects.all()
+    customers = models.StripeCustomer.objects.all()
 
     # Create invoices
     for customer in customers:
-        uninvoiced_orders = Order.objects.filter(user=customer.user, is_invoiceable=True, invoice_item=None)
+        uninvoiced_orders = models.Order.objects.filter(user=customer.user, is_invoiceable=True, invoice_item=None)
 
         for order in uninvoiced_orders:
             customer_id = customer.customer_id

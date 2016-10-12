@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from models import Item, Order, RiceCooker, MonthlyCost, AmountPaid
+from foodapp import models
 
 
 class ItemAdmin(admin.ModelAdmin):
@@ -31,8 +31,8 @@ class OrderAdmin(admin.ModelAdmin):
     list_display = ('user', 'date', 'item', 'quantity', 'invoiceitem_id', 'is_invoiceable')
 
 
-admin.site.register(Item, ItemAdmin)
-admin.site.register(Order, OrderAdmin)
-admin.site.register(RiceCooker)
-admin.site.register(MonthlyCost)
-admin.site.register(AmountPaid)
+admin.site.register(models.Item, ItemAdmin)
+admin.site.register(models.Order, OrderAdmin)
+admin.site.register(models.RiceCooker)
+admin.site.register(models.MonthlyCost)
+admin.site.register(models.AmountPaid)

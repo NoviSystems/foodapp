@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-import datetime
+from datetime import date, datetime
 
 
 class StripeCustomer(models.Model):
@@ -25,7 +25,7 @@ class Item(models.Model):
 
 class Order(models.Model):
     user = models.ForeignKey(User, related_name='orders')
-    date = models.DateField(default=datetime.date.today)
+    date = models.DateField(default=date.today)
     item = models.ForeignKey(Item)
     invoiceitem_id = models.CharField(max_length=36, blank=True)
     is_invoiceable = models.BooleanField(default=True)
@@ -56,7 +56,7 @@ class RiceCooker(models.Model):
 
 class MonthlyCost(models.Model):
     cost = models.DecimalField(max_digits=10, decimal_places=2)
-    date = models.DateField(default=datetime.date.today)
+    date = models.DateField(default=date.today)
 
     def __unicode__(self):
         return u"$%3.2f on %s." % (self.cost, self.date)
@@ -64,7 +64,7 @@ class MonthlyCost(models.Model):
 
 class AmountPaid(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    date = models.DateField(default=datetime.date.today)
+    date = models.DateField(default=date.today)
     user = models.ForeignKey(User)
 
     def __unicode__(self):
