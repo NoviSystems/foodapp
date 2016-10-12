@@ -16,6 +16,9 @@
     </li>
     <li><a class="dropdown-toggle" type="button"href="#billing" data-toggle="dropdown">Billing <i class="fa fa-credit-card"></i> <span class="caret"></span></a>
         <ul class="dropdown-menu">
+            {% if user.is_superuser %}
+            <li><a href="{% url 'foodapp:super_invoices' %}">All Invoices</a></li>
+            {% endif %}
             <li><a href="{% url 'foodapp:stripe_invoices' %}">Invoices</a></li>
             <li><a href="{% url 'foodapp:stripe_card_list' %}">Card Management</a></li>
         </ul>
