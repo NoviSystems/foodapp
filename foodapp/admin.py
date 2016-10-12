@@ -27,8 +27,8 @@ class ItemAdmin(admin.ModelAdmin):
 
 class OrderAdmin(admin.ModelAdmin):
     date_hierarchy = 'date'
-    list_filter = ('user', 'date', 'item', 'invoice_item', 'is_invoiceable')
-    list_display = ('user', 'date', 'item', 'quantity', 'invoice_item', 'is_invoiceable')
+    list_filter = ('user', 'date', 'item', 'invoiceitem_id', 'is_invoiceable')
+    list_display = ('user', 'date', 'item', 'quantity', 'invoiceitem_id', 'is_invoiceable')
 
 
 admin.site.register(Item, ItemAdmin)
