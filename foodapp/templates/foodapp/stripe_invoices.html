@@ -1,5 +1,4 @@
 {% extends 'foodapp/base.html' %}
-{% load staticfiles %}
 
 {% block content %}
 
@@ -17,10 +16,10 @@
         <tbody>
         {% if customer_exists %}
             {% if invoice_items %}
-                {% for amount, description, quantity, pur_date in invoice_items %}
+                {% for item in invoice_items %}
                     <tr>
                         <td>
-                            <p>Purchased {{ quantity }} {{ description }} on {{ pur_date }} for {{ amount }}</p>
+                            <p>Purchased {{ item.quantity }} {{ item.description }} on {{ item.date }} for {{ item.amount_usd }}</p>
                         </td>
                     </tr>
                 {% endfor %}
@@ -44,7 +43,7 @@
             {% else %}
                 <tr>
                     <td>
-                        <h4>No orders this week!</h4>
+                        <h4>No unpaid orders this week!</h4>
                     </td>
                 </tr>
             {% endif %}
@@ -83,22 +82,22 @@
    {% if customer_exists %}
         {% if invoices %}
             <div class="list-group" id="invoices">
-                {% if payment_error%}
+                {% if payment_error %}
                     <div class="list-group-item">
                     <h4 class='text-danger'>
                         Warning: One of your recent invoice payments has failed, possibly due to incorrect or out of date card information, or low balance.  Please check this information and consult the lab administrator.
                     </h4>
                     </div>
                 {% endif %}
-                {% for id, invoice_date, paid, items, total in invoices %}
+                {% for invoice in invoices %}
                     <h4>
-                        <a class="list-group-item accordion-toggle" href="#{{ id }}" data-toggle="collapse">{{ invoice_date|date:"l, M d Y" }}:&nbsp;&nbsp;<strong>{{ total }}</strong> - <strong>{% if paid %}<span class='text-success'>Paid</span>{% else %}<span class='text-danger'>Unpaid</span>{% endif %}</strong></a>
+                        <a class="list-group-item accordion-toggle" href="#{{ invoice.id }}" data-toggle="collapse">{{ invoice.date|date:"l, M d Y" }}:&nbsp;&nbsp;<strong>{{ invoice.total_usd }}</strong> - <strong>{% if invoice.paid %}<span class='text-success'>Paid</span>{% else %}<span class='text-danger'>Unpaid</span>{% endif %}</strong></a>
                     </h4>
 
-                    <ul class="list-group collapse out" id="{{ id }}">
-                        {% for description, item_date, quantity, amount in items %}
+                    <ul class="list-group collapse out" id="{{ invoice.id }}">
+                        {% for item in invoice.items %}
                             <li class="list-group-item">
-                                <p>{{ quantity }} {{ description }}{% if quantity > 1 %}s{% endif %} on {{ item_date }} costing {{ amount }}</p>
+                                <p>{{ item.quantity }} {{ item.description }}{% if quantity > 1 %}s{% endif %} on {{ item.date }} costing {{ item.amount_usd }}</p>
                             </li>
                         {% endfor %}
                         </li>

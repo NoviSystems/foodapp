@@ -1,5 +1,4 @@
 {% extends 'foodapp/base.html' %}
-{% load staticfiles %}
 
 {% block content %}
 <div class="panel panel-default">
@@ -17,18 +16,12 @@
             </tr>
         </thead>
         <tbody>
-            {% for user, invoices in invoices_dict.items %}
+            {% for customer in customers %}
                 <tr>
-                    <td>{{ user }}</td>
-                    {% if invoices.0 %}
-                        <td>{{ invoices.1 }}</td>
-                        <td><strong>{% if invoices.2 %}<span class='text-danger'>Yes</span>{% else %}<span class='text-success'>No</span>{% endif %}</td>
-                        <td><strong>{% if invoices.3 %}<span class='text-danger'>Yes</span>{% else %}<span class='text-success'>No</span>{% endif %}</td>
-                    {% else %}
-                        <td>--</td>
-                        <td>--</td>
-                        <td>--</td>
-                    {% endif %}
+                    <td>{{ customer.username }}</td>
+                    <td>{{ customer.amount_due }}</td>
+                    <td><strong>{% if customer.unpaid_invoices %}<span class='text-danger'>Yes</span>{% else %}<span class='text-success'>No</span>{% endif %}</strong></td>
+                    <td><strong>{% if customer.payment_error %}<span class='text-danger'>Yes</span>{% else %}<span class='text-success'>No</span>{% endif %}</strong></td>
                 </tr>
             {% endfor %}
         </tbody>

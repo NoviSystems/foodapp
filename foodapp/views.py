@@ -1,23 +1,79 @@
 import datetime
-import stripe
 from decimal import Decimal, ROUND_UP
+from multiprocessing import Pool
 
 from django.conf import settings
 
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.contrib.messages.views import SuccessMessageMixin
 from django.views.generic import CreateView, ListView, TemplateView
 from django.http import HttpResponseRedirect
 from django.core.urlresolvers import reverse_lazy
 from django.shortcuts import redirect
 from django.db.models import Sum
-from django.core.exceptions import ObjectDoesNotExist
+from django.utils.functional import cached_property
 
 from foodapp import forms, models
-from models import StripeCustomer
 
-stripe.api_key = settings.STRIPE_API_SECRET_KEY
+
+def get_stripe_customer(user):
+    customer = getattr(user, 'stripecustomer')
+
+    if not customer.is_valid():
+        return None
+    return customer
+
+
+def has_payment_error(invoices):
+    """
+    Determines if the stripe customer has an unresolved stripe invoice payment error
+    """
+    return any(
+        invoice.paid and invoice.attempted and not invoice.forgiven
+        for invoice in invoices
+    )
+
+
+def uninvoiced_items_context(invoice_items):
+    total_cost = sum(i.amount for i in invoice_items)
+    total_count = sum(i.quantity for i in invoice_items)
+
+    return {
+        'invoice_items': invoice_items,
+        'total_cost': '$%.2f' % (total_cost / 100.00),
+        'total_count': total_count,
+    }
+
+
+def customer_super_context(customer_id):
+    customer = models.StripeCustomer.objects.get(pk=customer_id)
+    invoices = customer.get_invoices()
+
+    return {
+        'username': customer.user.username,
+        'amount_due': uninvoiced_items_context(customer.get_uninvoiced_items())['total_cost'],
+        'unpaid_invoices': any(not invoice.paid for invoice in invoices),
+        'payment_error': has_payment_error(invoices),
+    }
+
+
+class StripeCustomerMixin(LoginRequiredMixin):
+
+    @cached_property
+    def user(self):
+        return self.request.user
+
+    @cached_property
+    def stripe_customer(self):
+        return get_stripe_customer(self.user)
+
+    def get_context_data(self, **kwargs):
+        context = super(StripeCustomerMixin, self).get_context_data(**kwargs)
+        context.update({
+            'customer_exists': self.stripe_customer is not None,
+            'stripe_customer': self.stripe_customer,
+        })
+        return context
 
 
 class HomeView(LoginRequiredMixin, CreateView):
@@ -67,176 +123,109 @@ class HomeView(LoginRequiredMixin, CreateView):
         context['customer_exists'] = True if get_stripe_customer(self.request.user) else False
         return context
 
+
 # Refactor into StripeCustomerCreateView and StripeCardCreateView
-
-
-class StripeCreateView(LoginRequiredMixin, TemplateView):
+class StripeCreateView(StripeCustomerMixin, TemplateView):
     success_url = reverse_lazy('foodapp:stripe_card_list')
     template_name = 'foodapp/stripe_create_form.html'
 
     def get_context_data(self, **kwargs):
         context = super(StripeCreateView, self).get_context_data()
-        context['customer_exists'] = True if get_stripe_customer(self.request.user) else False
         context['stripe_api_publishable_key'] = settings.STRIPE_API_PUBLISHABLE_KEY
         return context
 
     def post(self, request, *args, **kwargs):
         token = request.POST.get('stripeToken', False)
+
         # New Card
-        stripe_customer = get_stripe_customer(self.request.user)
-        if stripe_customer:
-            stripe_customer.sources.create(source=token)
-            return redirect(self.success_url, request)
-        # New Customer
+        if self.stripe_customer:
+            self.stripe_customer.add_source(source=token)
+
+        # New Customer & Card
         else:
-            customer = stripe.Customer.create(source=token)
-            StripeCustomer.objects.update_or_create(user=self.request.user,
-                                                    defaults={'customer_id': customer.id})
-            return redirect(self.success_url, request)
+            # delete existing card, as it *IS* invalid (probably deleted).
+            models.StripeCustomer.objects \
+                .filter(user=self.request.user) \
+                .delete()
 
+            models.StripeCustomer.objects.create(
+                user=self.request.user,
+                token=token,
+            )
 
-class StripeCardDeleteView(LoginRequiredMixin, TemplateView):
-    model = models.StripeCustomer
-    success_url = reverse_lazy('foodapp:stripe_card_list')
-
-    #args[0] stripe card id to delete
-    def post(self, request, *args, **kwargs):
-        customer = get_stripe_customer(self.request.user)
-        customer.sources.retrieve(args[0]).delete()
         return redirect(self.success_url, request)
 
 
-class StripeCardUpdateView(LoginRequiredMixin, TemplateView):
+class StripeCardDeleteView(StripeCustomerMixin, TemplateView):
     success_url = reverse_lazy('foodapp:stripe_card_list')
 
-    #args[0] stripe card id to update
-    def post(self, request, *args, **kwargs):
-        customer = get_stripe_customer(self.request.user)
-        new_default_card = customer.sources.retrieve(args[0])
-        customer.default_source = new_default_card.id
+    def post(self, request, card_id, *args, **kwargs):
+        customer = self.stripe_customer.get_customer()
+        card = customer.sources.retrieve(card_id)
+        card.delete()
+
+        return redirect(self.success_url, request)
+
+
+class StripeCardUpdateView(StripeCustomerMixin, TemplateView):
+    success_url = reverse_lazy('foodapp:stripe_card_list')
+
+    def post(self, request, card_id, *args, **kwargs):
+        customer = self.stripe_customer.get_customer()
+        card = customer.sources.retrieve(card_id)
+
+        customer.default_source = card.id
         customer.save()
+
         return redirect(self.success_url, request)
 
 
-class StripeCardListView(LoginRequiredMixin, TemplateView):
+class StripeCardListView(StripeCustomerMixin, TemplateView):
     template_name = 'foodapp/cards.html'
 
     def get_context_data(self, **kwargs):
         context = super(StripeCardListView, self).get_context_data(**kwargs)
-        stripe_customer = get_stripe_customer(self.request.user)
-        if stripe_customer:
-            cards = stripe_customer.sources.all(object='card')
-            defaultCard = stripe_customer.default_source
-            cardVals = []
-            for data in cards.get('data'):
-                if data['id'] == defaultCard:
-                    cardVals += [(data['id'], data['last4'], True)]
-                else:
-                    cardVals += [(data['id'], data['last4'], False)]
-            context['cards'] = cardVals
-        context['customer_exists'] = True if stripe_customer else False
+
+        if self.stripe_customer:
+            customer = self.stripe_customer.get_customer()
+
+            context['cards'] = [
+                (data['id'], data['last4'], data['id'] == customer.default_source)
+                for data in customer.sources.all(object='card').get('data')
+            ]
+
         return context
 
 
-class StripeInvoiceView(LoginRequiredMixin, TemplateView):
+class StripeInvoiceView(StripeCustomerMixin, TemplateView):
     success_url = reverse_lazy('foodapp:stripe_invoices')
     template_name = 'foodapp/stripe_invoices.html'
 
     def get_context_data(self, **kwargs):
         context = super(StripeInvoiceView, self).get_context_data(**kwargs)
-        stripe_customer = get_stripe_customer(self.request.user)
+        context['stripe_customer'] = self.stripe_customer
 
-        context['customer_exists'] = True if stripe_customer else False
+        if self.stripe_customer:
+            # Generate invoice items for any outstanding orders
+            self.request.user.orders.generate_invoice_items()
 
-        if stripe_customer:
-            ### Create ###
-            context.update(_get_uninvoiced_items_dict(stripe_customer))
+            # Get the invoiced items not yet associated with an invoice
+            uninvoiced_items = self.stripe_customer.get_uninvoiced_items()
+            context.update(uninvoiced_items_context(uninvoiced_items))
 
-            ### List ###
-            context['invoices'] = _get_invoices_list(stripe_customer)
-            context['payment_error'] = _has_payment_error(stripe_customer)
+            # Get all existing invoices for the customer
+            invoices = self.stripe_customer.get_invoices()
+            context.update({
+                'invoices': invoices,
+                'payment_error': has_payment_error(invoices),
+            })
 
         return context
 
     def post(self, request, *args, **kwargs):
-        # customer = get_stripe_customer(self.request.user)
-        stripe.Invoice.create(customer=self.request.user.stripecustomer.customer_id)
+        models.Invoice.create(self.stripe_customer)
+
         return redirect(self.success_url, request)
-
-
-def _get_uninvoiced_items_dict(stripe_customer):
-    all_invoice_items = stripe.InvoiceItem.all(customer=stripe_customer)
-    invoice_items = []
-    total_count = 0
-    total_cost = 0
-
-    for data in all_invoice_items.get('data'):
-        if data['invoice'] is None:
-            invoice_items += [
-                ('$%.2f' % (data['amount'] / 100.00),
-                    data['description'],
-                    int(data['metadata']['quantity']),
-                    data['metadata']['date']
-                 )]
-            total_count += int(data['metadata']['quantity'])
-            total_cost += int(data['amount'])
-
-    return {
-        'invoice_items': invoice_items,
-        'total_cost': '$%.2f' % (total_cost / 100.00),
-        'total_count': total_count,
-    }
-
-
-def _get_invoices_list(stripe_customer):
-    invoices = []
-    all_invoices = stripe.Invoice.all(customer=stripe_customer).get('data')
-
-    for data in all_invoices:
-        items = []
-        for item in data['lines']:
-            items += [
-                (item['description'],
-                    item['metadata']['date'],
-                    int(item['metadata']['quantity']),
-                    '$%.2f' % (item['amount'] / 100.00),
-                 )]
-
-        invoice_total = '$%.2f' % (sum([item['amount'] for item in data['lines']]) / 100.00)
-
-        invoices.append([
-            data['id'],
-            datetime.datetime.fromtimestamp(int(data['date'])),
-            data['paid'],
-            items,
-            invoice_total
-        ])
-    return invoices
-
-
-def get_stripe_customer(user):
-    try:
-        customer_id = user.stripecustomer.customer_id
-        customer = stripe.Customer.retrieve(customer_id)
-        return customer
-    except stripe.InvalidRequestError:
-        return None
-    except ObjectDoesNotExist:
-        return None
-
-
-def _has_payment_error(stripe_customer):
-    """ Determines if the stripe customer has an unresolved stripe invoice payment error
-    """
-    payment_error = False
-    invoices = stripe.Invoice.all(customer=stripe_customer).get('data')
-
-    for invoice in invoices:
-        payment_error = not invoice.paid and \
-            invoice.attempted and not invoice.forgiven \
-            or payment_error
-
-    return payment_error
 
 
 class OrderListView(LoginRequiredMixin, ListView):
@@ -254,26 +243,16 @@ class SuperStripeInvoiceView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
 
     def get_context_data(self, **kwargs):
         context = super(SuperStripeInvoiceView, self).get_context_data(**kwargs)
-        users = models.User.objects.filter(is_active=True)
-        customer_dict = {user: get_stripe_customer(user) for user in users}
-        invoices_dict = {}
+        context['customers'] = self.get_customer_data()
 
-        for user, stripe_customer in customer_dict.items():
-            if stripe_customer is None:
-                invoices_dict[user] = None
-            else:
-                invoices = stripe.Invoice.all(customer=stripe_customer).get('data')
-                unpaid_invoices = len([invoice for invoice in invoices if not invoice.paid]) > 0
-
-                invoices_dict[user] = (
-                    stripe_customer is not None,  # user_exists
-                    _get_uninvoiced_items_dict(stripe_customer)['total_cost'],  # amount_owed
-                    unpaid_invoices,  # unpaid_invoices
-                    _has_payment_error(stripe_customer),
-                )
-
-        context['invoices_dict'] = invoices_dict
         return context
+
+    def get_customer_data(self):
+        customers = User.objects.filter(is_active=True)
+        customers = [get_stripe_customer(c) for c in customers]
+        customers = [c.pk for c in customers if c is not None]
+
+        return Pool().map(customer_super_context, customers)
 
 
 class UserOrderView(OrderListView):

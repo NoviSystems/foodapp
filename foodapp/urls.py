@@ -11,8 +11,8 @@ urlpatterns = [
     url(r'^billing/cards/$', views.StripeCardListView.as_view(), name='stripe_card_list'),
     url(r'^billing/cards/create$', views.StripeCreateView.as_view(), name='stripe_card_create'),
     url(r'^billing/cards/create$', views.StripeCreateView.as_view(), name='stripe_customer_create'),
-    url(r'^billing/cards/delete/(\w+)/$', views.StripeCardDeleteView.as_view(), name='stripe_card_delete'),
-    url(r'^billing/cards/update/(\w+)/$', views.StripeCardUpdateView.as_view(), name='stripe_card_update'),
+    url(r'^billing/cards/delete/(?P<card_id>\w+)/$', views.StripeCardDeleteView.as_view(), name='stripe_card_delete'),
+    url(r'^billing/cards/update/(?P<card_id>\w+)/$', views.StripeCardUpdateView.as_view(), name='stripe_card_update'),
 
     url(r'^billing/invoices/$', views.StripeInvoiceView.as_view(), name='stripe_invoices'),
     url(r'^billing/invoices/super/', views.SuperStripeInvoiceView.as_view(), name='super_invoices'),
