@@ -31,8 +31,14 @@ class OrderAdmin(admin.ModelAdmin):
     list_display = ('user', 'date', 'item', 'quantity', 'invoiceitem_id', 'is_invoiceable')
 
 
+class StripeCustomerAdmin(admin.ModelAdmin):
+    list_filter = ('user', 'customer_id')
+    list_display = ('user', 'customer_id')
+
+
 admin.site.register(models.Item, ItemAdmin)
 admin.site.register(models.Order, OrderAdmin)
+admin.site.register(models.StripeCustomer, StripeCustomerAdmin)
 admin.site.register(models.RiceCooker)
 admin.site.register(models.MonthlyCost)
 admin.site.register(models.AmountPaid)
